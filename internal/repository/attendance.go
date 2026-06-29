@@ -53,15 +53,29 @@ func (r *AttendanceRepository) BulkMark(ctx context.Context, sessionID, markedBy
 	return records, tx.Commit()
 }
 
-func (r *AttendanceRepository) GetBySession(ctx context.Context, sessionID string) ([]models.AttendanceRecord, error) {
-	rows, err := r.db.QueryContext(ctx, `
+func (r *AttendanceRepository) GetBySession(ctx context.Context, sessionID, status string, offset, limit int) ([]models.AttendanceRecord, int, error) {
+	where := "WHERE ar.session_id = $1"
+	args := []any{sessionID}
+	if status != "" {
+		args = append(args, status)
+		where += fmt.Sprintf(" AND ar.status = $%d", len(args))
+	}
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM attendance_records ar `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT ar.id, ar.session_id, ar.student_id, u.name, ar.status, ar.marked_by, ar.marked_at, ar.locked
 		FROM attendance_records ar
 		JOIN users u ON u.id = ar.student_id
-		WHERE ar.session_id = $1 ORDER BY u.name
-	`, sessionID)
+		%s ORDER BY u.name LIMIT $%d OFFSET $%d
+	`, where, len(args)-1, len(args)), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -70,22 +84,44 @@ func (r *AttendanceRepository) GetBySession(ctx context.Context, sessionID strin
 		var rec models.AttendanceRecord
 		if err := rows.Scan(&rec.ID, &rec.SessionID, &rec.StudentID, &rec.StudentName,
 			&rec.Status, &rec.MarkedBy, &rec.MarkedAt, &rec.Locked); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		records = append(records, rec)
 	}
-	return records, rows.Err()
+	return records, total, rows.Err()
 }
 
-func (r *AttendanceRepository) GetByStudent(ctx context.Context, studentID string) ([]models.AttendanceRecord, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT ar.id, ar.session_id, ar.student_id, u.name, ar.status, ar.marked_by, ar.marked_at, ar.locked
+func (r *AttendanceRepository) GetByStudent(ctx context.Context, studentID, batchID, status string, offset, limit int) ([]models.AttendanceRecord, int, error) {
+	where := "WHERE ar.student_id = $1"
+	args := []any{studentID}
+	if batchID != "" {
+		args = append(args, batchID)
+		where += fmt.Sprintf(" AND s.batch_id = $%d", len(args))
+	}
+	if status != "" {
+		args = append(args, status)
+		where += fmt.Sprintf(" AND ar.status = $%d", len(args))
+	}
+
+	from := `
 		FROM attendance_records ar
-		JOIN users u ON u.id = ar.student_id
-		WHERE ar.student_id = $1 ORDER BY ar.marked_at DESC
-	`, studentID)
+		JOIN users u ON u.id = ar.student_id`
+	if batchID != "" {
+		from += ` JOIN sessions s ON s.id = ar.session_id`
+	}
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) `+from+` `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT ar.id, ar.session_id, ar.student_id, u.name, ar.status, ar.marked_by, ar.marked_at, ar.locked
+		%s %s ORDER BY ar.marked_at DESC LIMIT $%d OFFSET $%d
+	`, from, where, len(args)-1, len(args)), args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -94,11 +130,11 @@ func (r *AttendanceRepository) GetByStudent(ctx context.Context, studentID strin
 		var rec models.AttendanceRecord
 		if err := rows.Scan(&rec.ID, &rec.SessionID, &rec.StudentID, &rec.StudentName,
 			&rec.Status, &rec.MarkedBy, &rec.MarkedAt, &rec.Locked); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		records = append(records, rec)
 	}
-	return records, rows.Err()
+	return records, total, rows.Err()
 }
 
 func (r *AttendanceRepository) Get(ctx context.Context, id string) (*models.AttendanceRecord, error) {
@@ -108,7 +144,7 @@ func (r *AttendanceRepository) Get(ctx context.Context, id string) (*models.Atte
 		FROM attendance_records WHERE id = $1
 	`, id).Scan(&rec.ID, &rec.SessionID, &rec.StudentID, &rec.Status, &rec.MarkedBy, &rec.MarkedAt, &rec.Locked)
 	if err == sql.ErrNoRows {
-		return nil, httpx.ErrNotFound
+		return nil, httpx.NotFound("attendance record not found")
 	}
 	return &rec, err
 }
@@ -123,7 +159,7 @@ func (r *AttendanceRepository) AdminEdit(ctx context.Context, id, newStatus, act
 	var oldStatus string
 	err = tx.QueryRowContext(ctx, `SELECT status FROM attendance_records WHERE id = $1 FOR UPDATE`, id).Scan(&oldStatus)
 	if err == sql.ErrNoRows {
-		return nil, httpx.ErrNotFound
+		return nil, httpx.NotFound("attendance record not found")
 	}
 	if err != nil {
 		return nil, err

@@ -38,14 +38,13 @@ CREATE TABLE subjects (
 
 CREATE TABLE subject_offerings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    academic_year_id UUID NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
     class_id UUID NOT NULL REFERENCES academic_classes(id) ON DELETE CASCADE,
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     fee_amount DECIMAL(12, 2) NOT NULL CHECK (fee_amount >= 0),
     fee_currency VARCHAR(3) NOT NULL DEFAULT 'INR',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (academic_year_id, class_id, subject_id)
+    UNIQUE (class_id, subject_id)
 );
 
 CREATE TABLE subject_offering_fee_history (

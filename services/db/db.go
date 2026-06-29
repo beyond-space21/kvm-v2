@@ -14,6 +14,10 @@ func Connect(databaseURL string) (*sql.DB, error) {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
+	if err := EnsureDatabase(databaseURL); err != nil {
+		return nil, err
+	}
+
 	conn, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)

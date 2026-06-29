@@ -36,11 +36,11 @@ func (h *Handler) studentAttendance(w http.ResponseWriter, r *http.Request) {
 	studentID := chi.URLParam(r, "id")
 
 	if claims.Role == models.RoleStudent && claims.UserID != studentID {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("you can only view your own attendance report"))
 		return
 	}
 	if claims.Role != models.RoleSuperAdmin && claims.Role != models.RoleStaff && claims.Role != models.RoleStudent {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("insufficient permissions for this action"))
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *Handler) batch(w http.ResponseWriter, r *http.Request) {
 	if claims.Role == models.RoleStaff {
 		ok, err := h.batches.IsTeacherOf(r.Context(), batchID, claims.UserID)
 		if err != nil || !ok {
-			httpx.WriteError(w, httpx.ErrForbidden)
+			httpx.WriteError(w, httpx.Forbidden("you can only view reports for your own batches"))
 			return
 		}
 	}
@@ -86,7 +86,7 @@ func (h *Handler) teacher(w http.ResponseWriter, r *http.Request) {
 	teacherID := chi.URLParam(r, "id")
 
 	if claims.Role == models.RoleStaff && claims.UserID != teacherID {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("you can only view your own teacher report"))
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *Handler) daily(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authsvc.ClaimsFromContext(r.Context())
 	date := r.URL.Query().Get("date")
 	if date == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+		httpx.WriteError(w, httpx.InvalidInput("date query parameter is required (YYYY-MM-DD)"))
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *Handler) monthly(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authsvc.ClaimsFromContext(r.Context())
 	month := r.URL.Query().Get("month")
 	if month == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+		httpx.WriteError(w, httpx.InvalidInput("month query parameter is required (YYYY-MM)"))
 		return
 	}
 
@@ -141,19 +141,29 @@ func (h *Handler) monthly(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) enrollments(w http.ResponseWriter, r *http.Request) {
-	reports, err := h.reports.EnrollmentReport(r.Context(), r.URL.Query().Get("year_id"))
+	p := httpx.ParsePagination(r)
+	q := r.URL.Query()
+	reports, total, err := h.reports.EnrollmentReport(r.Context(), q.Get("year_id"), q.Get("class_id"), q.Get("batch_id"), p.Offset, p.Limit)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, reports)
+	httpx.WriteJSON(w, http.StatusOK, models.ListResponse[repository.EnrollmentReport]{
+		Data: reports,
+		Pagination: models.Pagination{Page: p.Page, Limit: p.Limit, Total: total},
+	})
 }
 
 func (h *Handler) fees(w http.ResponseWriter, r *http.Request) {
-	summaries, err := h.reports.FeeSummary(r.Context(), r.URL.Query().Get("year_id"))
+	p := httpx.ParsePagination(r)
+	q := r.URL.Query()
+	summaries, total, err := h.reports.FeeSummary(r.Context(), q.Get("year_id"), q.Get("class_id"), p.Offset, p.Limit)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, summaries)
+	httpx.WriteJSON(w, http.StatusOK, models.ListResponse[repository.FeeSummary]{
+		Data: summaries,
+		Pagination: models.Pagination{Page: p.Page, Limit: p.Limit, Total: total},
+	})
 }

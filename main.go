@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"kvm_v2/Events"
-	authhandler "kvm_v2/Events/auth"
-	"kvm_v2/internal/repository"
 	"kvm_v2/services/auth"
 	"kvm_v2/services/config"
 	"kvm_v2/services/db"
@@ -32,10 +30,6 @@ func main() {
 		log.Fatalf("database: %v", err)
 	}
 	defer database.Close()
-
-	if err := authhandler.BootstrapAdmin(context.Background(), repository.NewUserRepository(database), cfg.BootstrapEmail, cfg.BootstrapPass); err != nil {
-		log.Printf("bootstrap admin: %v", err)
-	}
 
 	authService, err := auth.NewService(cfg.JWTSecret)
 	if err != nil {

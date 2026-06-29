@@ -25,17 +25,24 @@ const (
 	AttendancePresent = "present"
 	AttendanceAbsent  = "absent"
 	AttendanceLate    = "late"
+
+	InvoicePending = "pending"
+	InvoicePartial = "partial"
+	InvoicePaid    = "paid"
+	InvoiceWaived  = "waived"
 )
 
 type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	Name         string    `json:"name"`
-	Role         string    `json:"role"`
-	Status       string    `json:"status"`
-	Phone        *string   `json:"phone,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	Phone     *string   `json:"phone,omitempty"`
+	ClassID   *string   `json:"class_id,omitempty"`
+	ClassName string    `json:"class_name,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type AcademicYear struct {
@@ -63,17 +70,15 @@ type Subject struct {
 }
 
 type SubjectOffering struct {
-	ID             string    `json:"id"`
-	AcademicYearID string    `json:"academic_year_id"`
-	ClassID        string    `json:"class_id"`
-	SubjectID      string    `json:"subject_id"`
-	FeeAmount      float64   `json:"fee_amount"`
-	FeeCurrency    string    `json:"fee_currency"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	ClassName      string    `json:"class_name,omitempty"`
-	SubjectName    string    `json:"subject_name,omitempty"`
-	YearName       string    `json:"year_name,omitempty"`
+	ID          string    `json:"id"`
+	ClassID     string    `json:"class_id"`
+	SubjectID   string    `json:"subject_id"`
+	FeeAmount   float64   `json:"fee_amount"`
+	FeeCurrency string    `json:"fee_currency"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	ClassName   string    `json:"class_name,omitempty"`
+	SubjectName string    `json:"subject_name,omitempty"`
 }
 
 type FeeHistory struct {
@@ -90,7 +95,6 @@ type Batch struct {
 	Name        string    `json:"name"`
 	TeacherID   *string   `json:"teacher_id,omitempty"`
 	TeacherName string    `json:"teacher_name,omitempty"`
-	Capacity    *int      `json:"capacity,omitempty"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -171,4 +175,27 @@ type Pagination struct {
 type ListResponse[T any] struct {
 	Data       []T        `json:"data"`
 	Pagination Pagination `json:"pagination"`
+}
+
+type FeeInvoice struct {
+	ID           string    `json:"id"`
+	EnrollmentID string    `json:"enrollment_id"`
+	Amount       float64   `json:"amount"`
+	Currency     string    `json:"currency"`
+	Status       string    `json:"status"`
+	DueDate      *string   `json:"due_date,omitempty"`
+	PaidAmount   float64   `json:"paid_amount,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type FeePayment struct {
+	ID         string    `json:"id"`
+	InvoiceID  string    `json:"invoice_id"`
+	Amount     float64   `json:"amount"`
+	PaidAt     time.Time `json:"paid_at"`
+	Method     *string   `json:"method,omitempty"`
+	Reference  *string   `json:"reference,omitempty"`
+	RecordedBy string    `json:"recorded_by"`
+	CreatedAt  time.Time `json:"created_at"`
 }

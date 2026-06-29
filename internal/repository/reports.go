@@ -42,6 +42,8 @@ type FeeSummary struct {
 	StudentID    string  `json:"student_id"`
 	StudentName  string  `json:"student_name"`
 	TotalFee     float64 `json:"total_fee"`
+	TotalPaid    float64 `json:"total_paid"`
+	TotalDue     float64 `json:"total_due"`
 	SubjectCount int     `json:"subject_count"`
 }
 
@@ -210,26 +212,44 @@ func (r *ReportRepository) MonthlyReport(ctx context.Context, month, teacherID s
 	return r.scanBatchSubjectReports(rows)
 }
 
-func (r *ReportRepository) EnrollmentReport(ctx context.Context, yearID string) ([]EnrollmentReport, error) {
-	query := `
-		SELECT u.id, u.name, ac.name, s.name, b.name, e.status, so.fee_amount
+func (r *ReportRepository) EnrollmentReport(ctx context.Context, yearID, classID, batchID string, offset, limit int) ([]EnrollmentReport, int, error) {
+	where := "WHERE e.status = 'active'"
+	args := []any{}
+	if yearID != "" {
+		args = append(args, yearID)
+		where += ` AND e.academic_year_id = $` + fmt.Sprint(len(args))
+	}
+	if classID != "" {
+		args = append(args, classID)
+		where += ` AND so.class_id = $` + fmt.Sprint(len(args))
+	}
+	if batchID != "" {
+		args = append(args, batchID)
+		where += ` AND e.batch_id = $` + fmt.Sprint(len(args))
+	}
+
+	from := `
 		FROM enrollments e
 		JOIN users u ON u.id = e.student_id
 		JOIN batches b ON b.id = e.batch_id
 		JOIN subject_offerings so ON so.id = e.offering_id
 		JOIN subjects s ON s.id = so.subject_id
-		JOIN academic_classes ac ON ac.id = so.class_id
-		WHERE e.status = 'active'`
-	args := []any{}
-	if yearID != "" {
-		args = append(args, yearID)
-		query += ` AND e.academic_year_id = $1`
+		JOIN academic_classes ac ON ac.id = so.class_id`
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) `+from+` `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
 	}
-	query += ` ORDER BY u.name, s.name`
+
+	args = append(args, limit, offset)
+	query := fmt.Sprintf(`
+		SELECT u.id, u.name, ac.name, s.name, b.name, e.status, so.fee_amount
+		%s %s ORDER BY u.name, s.name LIMIT $%d OFFSET $%d
+	`, from, where, len(args)-1, len(args))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -238,42 +258,68 @@ func (r *ReportRepository) EnrollmentReport(ctx context.Context, yearID string) 
 		var rep EnrollmentReport
 		if err := rows.Scan(&rep.StudentID, &rep.StudentName, &rep.ClassName, &rep.SubjectName,
 			&rep.BatchName, &rep.Status, &rep.FeeAmount); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		reports = append(reports, rep)
 	}
-	return reports, rows.Err()
+	return reports, total, rows.Err()
 }
 
-func (r *ReportRepository) FeeSummary(ctx context.Context, yearID string) ([]FeeSummary, error) {
-	query := `
-		SELECT u.id, u.name, SUM(so.fee_amount), COUNT(DISTINCT e.offering_id)
-		FROM enrollments e
-		JOIN users u ON u.id = e.student_id
-		JOIN subject_offerings so ON so.id = e.offering_id
-		WHERE e.status = 'active'`
+func (r *ReportRepository) FeeSummary(ctx context.Context, yearID, classID string, offset, limit int) ([]FeeSummary, int, error) {
+	where := "WHERE e.status = 'active'"
 	args := []any{}
 	if yearID != "" {
 		args = append(args, yearID)
-		query += ` AND e.academic_year_id = $1`
+		where += ` AND e.academic_year_id = $` + fmt.Sprint(len(args))
 	}
-	query += ` GROUP BY u.id, u.name ORDER BY u.name`
+	if classID != "" {
+		args = append(args, classID)
+		where += ` AND u.class_id = $` + fmt.Sprint(len(args))
+	}
+
+	from := `
+		FROM enrollments e
+		JOIN users u ON u.id = e.student_id
+		LEFT JOIN fee_invoices fi ON fi.enrollment_id = e.id
+		LEFT JOIN (
+			SELECT invoice_id, SUM(amount) AS total_paid
+			FROM fee_payments
+			GROUP BY invoice_id
+		) paid ON paid.invoice_id = fi.id`
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT u.id) `+from+` `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	query := fmt.Sprintf(`
+		SELECT u.id, u.name,
+		       COALESCE(SUM(fi.amount), 0),
+		       COALESCE(SUM(paid.total_paid), 0),
+		       COUNT(DISTINCT e.offering_id)
+		%s %s GROUP BY u.id, u.name ORDER BY u.name LIMIT $%d OFFSET $%d
+	`, from, where, len(args)-1, len(args))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var summaries []FeeSummary
 	for rows.Next() {
 		var s FeeSummary
-		if err := rows.Scan(&s.StudentID, &s.StudentName, &s.TotalFee, &s.SubjectCount); err != nil {
-			return nil, err
+		if err := rows.Scan(&s.StudentID, &s.StudentName, &s.TotalFee, &s.TotalPaid, &s.SubjectCount); err != nil {
+			return nil, 0, err
+		}
+		s.TotalDue = s.TotalFee - s.TotalPaid
+		if s.TotalDue < 0 {
+			s.TotalDue = 0
 		}
 		summaries = append(summaries, s)
 	}
-	return summaries, rows.Err()
+	return summaries, total, rows.Err()
 }
 
 func (r *ReportRepository) scanAttendanceReports(rows *sql.Rows) ([]AttendanceReport, error) {

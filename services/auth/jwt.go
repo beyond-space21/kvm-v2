@@ -70,19 +70,19 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			httpx.WriteError(w, httpx.ErrUnauthorized)
+			httpx.WriteError(w, httpx.Unauthorized("authorization header is required"))
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			httpx.WriteError(w, httpx.ErrUnauthorized)
+			httpx.WriteError(w, httpx.Unauthorized("authorization header must use Bearer scheme"))
 			return
 		}
 
 		claims, err := s.ParseToken(parts[1])
 		if err != nil {
-			httpx.WriteError(w, httpx.ErrUnauthorized)
+			httpx.WriteError(w, httpx.Unauthorized("invalid or expired token"))
 			return
 		}
 

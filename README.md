@@ -30,11 +30,9 @@ cp .env.example .env
 go run .
 ```
 
-On first run with `RUN_MIGRATIONS=true`, the schema is applied and a bootstrap super admin is created.
+On first run with `RUN_MIGRATIONS=true`, only the schema is applied. No admin user is created automatically.
 
-**Default admin:** `admin` / `123456`
-
-**Test UI:** open [http://localhost:8080/test_ui/](http://localhost:8080/test_ui/) after starting the server.
+Create the first admin explicitly with `POST /api/v1/auth/bootstrap`.
 
 ## Environment Variables
 
@@ -44,8 +42,6 @@ On first run with `RUN_MIGRATIONS=true`, the schema is applied and a bootstrap s
 | `DATABASE_URL` | — | PostgreSQL connection string |
 | `JWT_SECRET` | — | HS256 signing secret |
 | `RUN_MIGRATIONS` | `false` | Run migrations on startup |
-| `BOOTSTRAP_ADMIN_EMAIL` | `admin` | First admin email |
-| `BOOTSTRAP_ADMIN_PASSWORD` | `123456` | First admin password |
 
 ## API Overview
 
@@ -57,29 +53,29 @@ Base path: `/api/v1`
 - `GET /auth/me` — Current user (auth required)
 
 ### Users (admin)
-- `POST/GET/PATCH /staff/{id}`
-- `POST/GET/PATCH /students`, `GET /students`
+- `POST/GET/PATCH/DELETE /staff/{id}`, `GET /staff`
+- `POST/GET/PATCH/DELETE /students`, `GET /students`
 
 ### Academic (admin unless noted)
 - `POST/GET/PATCH/DELETE /academic-years/{id}`
-- `GET /classes`, `GET /classes/{id}/offerings`
+- `POST/GET/PATCH/DELETE /classes/{id}`, `GET /classes/{id}/offerings`
 - `POST/GET/PATCH/DELETE /subjects/{id}`
 - `POST/GET/PATCH/DELETE /offerings/{id}`, `PATCH /offerings/{id}/fee`
 
 ### Batches
-- `POST/GET/PATCH /batches` (admin)
+- `POST/GET/PATCH/DELETE /batches` (admin)
 - `GET /batches/mine` (staff)
 - `GET /batches/{id}/students` (admin, staff own batch)
 
 ### Enrollments
-- `POST /enrollments`, `PATCH /enrollments/{id}/transfer`, `DELETE /enrollments/{id}` (admin)
+- `POST/GET/DELETE /enrollments`, `GET /enrollments/{id}`, `PATCH /enrollments/{id}/transfer` (admin)
 - `GET /enrollments` (admin all, student own)
 - `GET /students/{id}/enrollments/history` (admin)
 
 ### Sessions
-- `POST/GET/PATCH /session-templates` (admin)
+- `POST/GET/PATCH/DELETE /session-templates` (admin)
 - `POST /sessions/generate` (admin)
-- `GET /sessions/today` (staff)
+- `GET /sessions/today`, `GET /sessions/{id}` (staff)
 - `PATCH /sessions/{id}/cancel` (admin)
 
 ### Attendance
@@ -112,9 +108,8 @@ make migrate-up   # Run migrations manually
 ## Academic Structure
 
 ```
-Academic Year → Class → Subject Offering (+ fee) → Batch → Session Template → Session → Attendance
-                                                      ↑
-                                              Enrollment ← Student
+Academic Year → Enrollment ← Student
+Class → Subject Offering (+ fee) → Batch → Session Template → Session → Attendance
 ```
 
 Seeded data: classes 8–12, subjects (Science, Math, English, Physics, Chemistry, Biology).

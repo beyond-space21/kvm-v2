@@ -7,24 +7,20 @@ import (
 )
 
 type Config struct {
-	Port           string
-	DatabaseURL    string
-	JWTSecret      string
-	RunMigrations  bool
-	BootstrapEmail string
-	BootstrapPass  string
+	Port          string
+	DatabaseURL   string
+	JWTSecret     string
+	RunMigrations bool
 }
 
 func Load() Config {
 	loadDotEnv()
 
 	return Config{
-		Port:           envOrDefault("PORT", "8080"),
-		DatabaseURL:    envOrDefault("DATABASE_URL", ""),
-		JWTSecret:      envOrDefault("JWT_SECRET", "dev-secret-change-in-production"),
-		RunMigrations:  os.Getenv("RUN_MIGRATIONS") == "true",
-		BootstrapEmail: envOrDefault("BOOTSTRAP_ADMIN_EMAIL", "admin"),
-		BootstrapPass:  envOrDefault("BOOTSTRAP_ADMIN_PASSWORD", "123456"),
+		Port:          envOrDefault("PORT", "8080"),
+		DatabaseURL:   envOrDefault("DATABASE_URL", ""),
+		JWTSecret:     envOrDefault("JWT_SECRET", "dev-secret-change-in-production"),
+		RunMigrations: os.Getenv("RUN_MIGRATIONS") == "true",
 	}
 }
 

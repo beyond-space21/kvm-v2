@@ -24,7 +24,7 @@ func testDB(t *testing.T) *httptest.Server {
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://lms:lms@localhost:5432/lms?sslmode=disable"
+		databaseURL = "postgres://postgres:postgres@localhost:5432/lms?sslmode=disable"
 	}
 
 	if err := db.RunMigrations(databaseURL); err != nil {
@@ -133,11 +133,9 @@ func TestLoginAndAcademicFlow(t *testing.T) {
 	srv := testDB(t)
 	token := login(t, srv, "test-admin@lms.local", "testpass123")
 
-	// List seeded classes
-	resp := authRequest(t, http.MethodGet, srv.URL+"/api/v1/classes", token, nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("classes status: %d", resp.StatusCode)
+	classID := classByGrade(t, srv.URL, token, 10)
+	if classID == "" {
+		t.Fatal("class 10 not found")
 	}
 
 	// Create academic year
@@ -163,7 +161,7 @@ func TestLoginAndAcademicFlow(t *testing.T) {
 
 	// Create student
 	studentResp := authRequest(t, http.MethodPost, srv.URL+"/api/v1/students", token, map[string]string{
-		"email": fmt.Sprintf("student-%d@lms.local", time.Now().UnixNano()), "password": "stud123", "name": "Test Student",
+		"email": fmt.Sprintf("student-%d@lms.local", time.Now().UnixNano()), "password": "stud123", "name": "Test Student", "class_id": classID,
 	})
 	defer studentResp.Body.Close()
 	if studentResp.StatusCode != http.StatusCreated {

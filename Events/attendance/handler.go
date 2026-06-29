@@ -55,14 +55,18 @@ func (h *Handler) bulkMark(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !ok {
-			httpx.WriteError(w, httpx.ErrForbidden)
+			httpx.WriteError(w, httpx.Forbidden("you can only mark attendance for your own batches"))
 			return
 		}
 	}
 
 	var req bulkMarkRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil || len(req.Records) == 0 {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if len(req.Records) == 0 {
+		httpx.WriteError(w, httpx.InvalidInput("at least one attendance record is required"))
 		return
 	}
 
@@ -79,7 +83,7 @@ func (h *Handler) bySession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
 
 	if claims.Role == models.RoleStudent {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("students cannot view session attendance"))
 		return
 	}
 
@@ -91,17 +95,21 @@ func (h *Handler) bySession(w http.ResponseWriter, r *http.Request) {
 		}
 		ok, err := h.batches.IsTeacherOf(r.Context(), session.BatchID, claims.UserID)
 		if err != nil || !ok {
-			httpx.WriteError(w, httpx.ErrForbidden)
+			httpx.WriteError(w, httpx.Forbidden("you can only view attendance for your own batches"))
 			return
 		}
 	}
 
-	records, err := h.attendance.GetBySession(r.Context(), sessionID)
+	p := httpx.ParsePagination(r)
+	records, total, err := h.attendance.GetBySession(r.Context(), sessionID, r.URL.Query().Get("status"), p.Offset, p.Limit)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, records)
+	httpx.WriteJSON(w, http.StatusOK, models.ListResponse[models.AttendanceRecord]{
+		Data: records,
+		Pagination: models.Pagination{Page: p.Page, Limit: p.Limit, Total: total},
+	})
 }
 
 func (h *Handler) byStudent(w http.ResponseWriter, r *http.Request) {
@@ -109,27 +117,31 @@ func (h *Handler) byStudent(w http.ResponseWriter, r *http.Request) {
 	studentID := chi.URLParam(r, "id")
 
 	if claims.Role == models.RoleStudent && claims.UserID != studentID {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("you can only view your own attendance"))
 		return
 	}
 
-	records, err := h.attendance.GetByStudent(r.Context(), studentID)
+	p := httpx.ParsePagination(r)
+	records, total, err := h.attendance.GetByStudent(r.Context(), studentID, r.URL.Query().Get("batch_id"), r.URL.Query().Get("status"), p.Offset, p.Limit)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
 
-	pct, present, total, err := h.attendance.StudentPercentage(r.Context(), studentID, r.URL.Query().Get("batch_id"))
+	pct, present, totalSessions, err := h.attendance.StudentPercentage(r.Context(), studentID, r.URL.Query().Get("batch_id"))
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"records":    records,
+		"records": models.ListResponse[models.AttendanceRecord]{
+			Data: records,
+			Pagination: models.Pagination{Page: p.Page, Limit: p.Limit, Total: total},
+		},
 		"percentage": pct,
 		"present":    present,
-		"total":      total,
+		"total":      totalSessions,
 	})
 }
 
@@ -137,8 +149,12 @@ func (h *Handler) adminEdit(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authsvc.ClaimsFromContext(r.Context())
 
 	var req editRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil || req.Status == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if req.Status == "" {
+		httpx.WriteError(w, httpx.InvalidInput("status is required"))
 		return
 	}
 

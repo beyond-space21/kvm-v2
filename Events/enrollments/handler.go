@@ -21,6 +21,7 @@ func NewHandler(enrollments *repository.EnrollmentRepository) *Handler {
 
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.With(authsvc.RequireAdmin()).Post("/enrollments", h.create)
+	r.With(authsvc.RequireAdmin()).Get("/enrollments/{id}", h.get)
 	r.With(authsvc.RequireAdmin()).Patch("/enrollments/{id}/transfer", h.transfer)
 	r.With(authsvc.RequireAdmin()).Delete("/enrollments/{id}", h.remove)
 	r.Get("/enrollments", h.list)
@@ -40,8 +41,12 @@ type transferRequest struct {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req createRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil || req.StudentID == "" || req.AcademicYearID == "" || req.OfferingID == "" || req.BatchID == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if req.StudentID == "" || req.AcademicYearID == "" || req.OfferingID == "" || req.BatchID == "" {
+		httpx.WriteError(w, httpx.InvalidInput("student_id, academic_year_id, offering_id, and batch_id are required"))
 		return
 	}
 	e, err := h.enrollments.Create(r.Context(), req.StudentID, req.AcademicYearID, req.OfferingID, req.BatchID)
@@ -54,11 +59,24 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
 	var req transferRequest
-	if err := httpx.DecodeJSON(r, &req); err != nil || req.BatchID == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if req.BatchID == "" {
+		httpx.WriteError(w, httpx.InvalidInput("batch_id is required"))
 		return
 	}
 	e, err := h.enrollments.Transfer(r.Context(), chi.URLParam(r, "id"), req.BatchID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, e)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	e, err := h.enrollments.Get(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -85,7 +103,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := httpx.ParsePagination(r)
-	enrollments, total, err := h.enrollments.List(r.Context(), studentID, r.URL.Query().Get("year_id"), r.URL.Query().Get("batch_id"), status, p.Offset, p.Limit)
+	q := r.URL.Query()
+	enrollments, total, err := h.enrollments.List(r.Context(), studentID, q.Get("year_id"), q.Get("offering_id"), q.Get("batch_id"), status, p.Offset, p.Limit)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -97,10 +116,15 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
-	history, err := h.enrollments.History(r.Context(), chi.URLParam(r, "id"))
+	p := httpx.ParsePagination(r)
+	q := r.URL.Query()
+	history, total, err := h.enrollments.History(r.Context(), chi.URLParam(r, "id"), q.Get("year_id"), q.Get("offering_id"), q.Get("status"), p.Offset, p.Limit)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, history)
+	httpx.WriteJSON(w, http.StatusOK, models.ListResponse[models.Enrollment]{
+		Data: history,
+		Pagination: models.Pagination{Page: p.Page, Limit: p.Limit, Total: total},
+	})
 }

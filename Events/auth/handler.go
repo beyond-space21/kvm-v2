@@ -50,21 +50,21 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Email == "" || req.Password == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+		httpx.WriteError(w, httpx.InvalidInput("email and password are required"))
 		return
 	}
 
 	user, hash, err := h.users.GetByEmail(r.Context(), req.Email)
 	if err != nil {
-		httpx.WriteError(w, httpx.ErrUnauthorized)
+		httpx.WriteError(w, httpx.Unauthorized("invalid email or password"))
 		return
 	}
 	if user.Status != models.StatusActive {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("account is inactive"))
 		return
 	}
 	if !authsvc.CheckPassword(hash, req.Password) {
-		httpx.WriteError(w, httpx.ErrUnauthorized)
+		httpx.WriteError(w, httpx.Unauthorized("invalid email or password"))
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *Handler) bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if count > 0 {
-		httpx.WriteError(w, httpx.ErrForbidden)
+		httpx.WriteError(w, httpx.Forbidden("a super admin already exists"))
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *Handler) bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Email == "" || req.Password == "" || req.Name == "" {
-		httpx.WriteError(w, httpx.ErrInvalidInput)
+		httpx.WriteError(w, httpx.InvalidInput("email, password, and name are required"))
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *Handler) bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.users.Create(r.Context(), req.Email, hash, req.Name, models.RoleSuperAdmin, nil)
+	user, err := h.users.Create(r.Context(), req.Email, hash, req.Name, models.RoleSuperAdmin, nil, nil)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -128,7 +128,7 @@ func (h *Handler) bootstrap(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	claims, ok := authsvc.ClaimsFromContext(r.Context())
 	if !ok {
-		httpx.WriteError(w, httpx.ErrUnauthorized)
+		httpx.WriteError(w, httpx.Unauthorized("authentication required"))
 		return
 	}
 
@@ -149,6 +149,6 @@ func BootstrapAdmin(ctx context.Context, users *repository.UserRepository, email
 	if err != nil {
 		return err
 	}
-	_, err = users.Create(ctx, email, hash, "Super Admin", models.RoleSuperAdmin, nil)
+	_, err = users.Create(ctx, email, hash, "Super Admin", models.RoleSuperAdmin, nil, nil)
 	return err
 }

@@ -88,8 +88,10 @@ Authorization: Bearer <jwt_token>
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | POST | `/api/v1/staff` | admin | Create staff (teacher) |
+| GET | `/api/v1/staff` | admin | List staff |
 | GET | `/api/v1/staff/{id}` | admin | Get staff by ID |
 | PATCH | `/api/v1/staff/{id}` | admin | Update staff / activate / deactivate |
+| DELETE | `/api/v1/staff/{id}` | admin | Delete staff |
 
 **Create staff**
 
@@ -114,6 +116,8 @@ Authorization: Bearer <jwt_token>
 
 `status`: `active` | `inactive`
 
+**Query params (list):** `page`, `limit`, `status`, `search` (name or email)
+
 ### Students
 
 | Method | Path | Role | Description |
@@ -122,8 +126,9 @@ Authorization: Bearer <jwt_token>
 | GET | `/api/v1/students` | admin | List students |
 | GET | `/api/v1/students/{id}` | admin | Get student by ID |
 | PATCH | `/api/v1/students/{id}` | admin | Update student / activate / deactivate |
+| DELETE | `/api/v1/students/{id}` | admin | Delete student |
 
-**Query params (list):** `page`, `limit`
+**Query params (list):** `page`, `limit`, `status`, `class_id`, `search` (name or email)
 
 **Create student**
 
@@ -132,7 +137,21 @@ Authorization: Bearer <jwt_token>
   "email": "student@example.com",
   "password": "123456",
   "name": "Rahul",
-  "phone": "+91..."
+  "phone": "+91...",
+  "class_id": "<uuid>"
+}
+```
+
+`class_id` is required. Students can only enroll in offerings for their assigned class.
+
+**Update student**
+
+```json
+{
+  "name": "Updated Name",
+  "phone": "+91...",
+  "status": "active",
+  "class_id": "<uuid>"
 }
 ```
 
@@ -161,15 +180,31 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
+**Query params (list):** `page`, `limit`, `is_active` (`true` | `false`)
+
 ### Classes
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
-| GET | `/api/v1/classes` | Any | List classes (seeded 8–12) |
+| POST | `/api/v1/classes` | admin | Create class |
+| GET | `/api/v1/classes` | Any | List classes |
 | GET | `/api/v1/classes/{id}` | Any | Get class |
+| PATCH | `/api/v1/classes/{id}` | admin | Update class |
+| DELETE | `/api/v1/classes/{id}` | admin | Delete class |
 | GET | `/api/v1/classes/{id}/offerings` | Any | Offerings for a class |
 
-**Query params (offerings):** `year_id`
+**Create / update body**
+
+```json
+{
+  "name": "Class 8",
+  "grade": 8
+}
+```
+
+**Query params (list):** `page`, `limit`, `grade`
+
+**Query params (class offerings):** `page`, `limit`, `subject_id`
 
 ### Subjects
 
@@ -190,6 +225,8 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
+**Query params (list):** `page`, `limit`, `search` (matches name or code)
+
 ### Subject offerings
 
 | Method | Path | Role | Description |
@@ -197,21 +234,30 @@ Authorization: Bearer <jwt_token>
 | POST | `/api/v1/offerings` | admin | Create offering (class + subject + fee) |
 | GET | `/api/v1/offerings` | admin | List offerings |
 | GET | `/api/v1/offerings/{id}` | admin | Get offering |
+| PATCH | `/api/v1/offerings/{id}` | admin | Update offering class/subject |
 | PATCH | `/api/v1/offerings/{id}/fee` | admin | Update fee (saves history) |
 | DELETE | `/api/v1/offerings/{id}` | admin | Delete offering |
 | GET | `/api/v1/offerings/{id}/fee-history` | admin | Fee revision history |
 
-**Query params (list):** `year_id`, `class_id`
+**Query params (list):** `class_id`, `subject_id`, `page`, `limit`
 
 **Create offering**
 
 ```json
 {
-  "academic_year_id": "<uuid>",
   "class_id": "<uuid>",
   "subject_id": "<uuid>",
   "fee_amount": 5000,
   "fee_currency": "INR"
+}
+```
+
+**Update offering**
+
+```json
+{
+  "class_id": "<uuid>",
+  "subject_id": "<uuid>"
 }
 ```
 
@@ -232,15 +278,19 @@ Authorization: Bearer <jwt_token>
 |--------|------|------|-------------|
 | POST | `/api/v1/batches` | admin | Create batch |
 | GET | `/api/v1/batches` | admin | List batches |
+| GET | `/api/v1/batches/{id}` | admin | Get batch |
 | PATCH | `/api/v1/batches/{id}` | admin | Update batch |
+| DELETE | `/api/v1/batches/{id}` | admin | Delete batch |
 | GET | `/api/v1/batches/mine` | staff, admin | Assigned batches (staff sees own) |
 | GET | `/api/v1/batches/{id}/students` | staff*, admin | Enrolled students in batch |
 
 \* Staff only if they teach that batch.
 
-**Query params (list):** `offering_id`, `status`, `page`, `limit`
+**Query params (list):** `offering_id`, `teacher_id`, `status`, `page`, `limit`
 
 **Query params (mine):** `teacher_id` (admin only), `page`, `limit`
+
+**Query params (batch students):** `page`, `limit`
 
 **Create batch**
 
@@ -248,8 +298,7 @@ Authorization: Bearer <jwt_token>
 {
   "offering_id": "<uuid>",
   "name": "Batch A",
-  "teacher_id": "<uuid>",
-  "capacity": 30
+  "teacher_id": "<uuid>"
 }
 ```
 
@@ -259,7 +308,6 @@ Authorization: Bearer <jwt_token>
 {
   "name": "Batch A",
   "teacher_id": "<uuid>",
-  "capacity": 25,
   "status": "active"
 }
 ```
@@ -273,12 +321,15 @@ Authorization: Bearer <jwt_token>
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | POST | `/api/v1/enrollments` | admin | Enroll student in batch |
+| GET | `/api/v1/enrollments/{id}` | admin | Get enrollment |
 | PATCH | `/api/v1/enrollments/{id}/transfer` | admin | Transfer student to another batch |
 | DELETE | `/api/v1/enrollments/{id}` | admin | Remove enrollment |
 | GET | `/api/v1/enrollments` | admin, student | List enrollments |
 | GET | `/api/v1/students/{id}/enrollments/history` | admin | Enrollment history for student |
 
-**Query params (list):** `student_id`, `year_id`, `batch_id`, `status`, `page`, `limit`
+**Query params (list):** `student_id`, `year_id`, `offering_id`, `batch_id`, `status`, `page`, `limit`
+
+**Query params (history):** `year_id`, `offering_id`, `status`, `page`, `limit`
 
 Students automatically see only their own active enrollments.
 
@@ -293,7 +344,7 @@ Students automatically see only their own active enrollments.
 }
 ```
 
-**Transfer enrollment**
+**Transfer enrollment** — new batch must belong to the same offering.
 
 ```json
 {
@@ -303,32 +354,79 @@ Students automatically see only their own active enrollments.
 
 ---
 
+## Payments
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/enrollments/{id}/invoice` | admin | Fee invoice for enrollment |
+| GET | `/api/v1/enrollments/{id}/payments` | admin | Payment history for enrollment |
+| POST | `/api/v1/enrollments/{id}/payments` | admin | Record a payment |
+
+An invoice is created automatically when an enrollment is created (amount snapshotted from the offering fee).
+
+**Record payment**
+
+```json
+{
+  "amount": 5000,
+  "method": "cash",
+  "reference": "receipt-001"
+}
+```
+
+`method` and `reference` are optional.
+
+**Invoice response**
+
+```json
+{
+  "id": "<uuid>",
+  "enrollment_id": "<uuid>",
+  "amount": 5000,
+  "currency": "INR",
+  "status": "pending",
+  "paid_amount": 0,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+`status`: `pending` | `partial` | `paid` | `waived`
+
+**Query params (payments list):** `page`, `limit`
+
+---
+
 ## Sessions
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | POST | `/api/v1/session-templates` | admin | Create recurring session template |
 | GET | `/api/v1/session-templates` | admin | List session templates |
+| GET | `/api/v1/session-templates/{id}` | admin | Get session template |
 | PATCH | `/api/v1/session-templates/{id}` | admin | Update session template |
+| DELETE | `/api/v1/session-templates/{id}` | admin | Delete session template |
 | POST | `/api/v1/sessions/generate` | admin | Generate session occurrences |
 | GET | `/api/v1/sessions/today` | staff, admin | Today's sessions |
+| GET | `/api/v1/sessions/{id}` | staff, admin | Get session |
 | PATCH | `/api/v1/sessions/{id}/cancel` | admin | Cancel a session |
 
-**Query params (templates):** `batch_id`
+**Query params (templates):** `batch_id`, `teacher_id`, `page`, `limit`
 
-**Query params (today):** `teacher_id` (admin only)
+**Query params (today):** `teacher_id` (admin only), `page`, `limit`
 
 **Create template**
 
 ```json
 {
   "batch_id": "<uuid>",
-  "teacher_id": "<uuid>",
   "day_of_week": 1,
   "start_time": "17:00",
   "end_time": "18:00"
 }
 ```
+
+Teacher is taken from the batch's assigned teacher. The batch must have a teacher before creating a template.
 
 `day_of_week`: 0 = Sunday … 6 = Saturday
 
@@ -359,7 +457,11 @@ Students automatically see only their own active enrollments.
 
 \** Students can only view their own record.
 
-**Query params (student):** `batch_id`
+**Query params (session attendance):** `status`, `page`, `limit`
+
+**Query params (student attendance):** `batch_id`, `status`, `page`, `limit`
+
+Student attendance response wraps records in the standard paginated `data` object plus `percentage`, `present`, and `total` fields.
 
 **Bulk mark**
 
@@ -400,7 +502,7 @@ Set `"lock": true` to finalize attendance for the session.
 | GET | `/api/v1/reports/daily` | admin, staff**** | Daily attendance report |
 | GET | `/api/v1/reports/monthly` | admin, staff**** | Monthly attendance report |
 | GET | `/api/v1/reports/enrollments` | admin | Enrollment report |
-| GET | `/api/v1/reports/fees` | admin | Fee summary report |
+| GET | `/api/v1/reports/fees` | admin | Fee summary (total, paid, due per student) |
 
 \* Student can only view own ID.
 
@@ -416,8 +518,8 @@ Set `"lock": true` to finalize attendance for the session.
 |----------|--------|
 | `/reports/daily` | `date` (required, `YYYY-MM-DD`) |
 | `/reports/monthly` | `month` (required, `YYYY-MM`) |
-| `/reports/enrollments` | `year_id` |
-| `/reports/fees` | `year_id` |
+| `/reports/enrollments` | `year_id`, `class_id`, `batch_id`, `page`, `limit` |
+| `/reports/fees` | `year_id`, `class_id`, `page`, `limit` |
 
 ---
 
@@ -445,25 +547,20 @@ List endpoints support:
 
 ---
 
-## Test UI
-
-| Path | Description |
-|------|-------------|
-| `/test_ui/` | Simple HTML page for manual API testing |
-
----
-
 ## Typical admin setup flow
 
-1. `POST /auth/login`
-2. `POST /academic-years`
-3. `POST /offerings`
-4. `POST /staff`
-5. `POST /students`
-6. `POST /batches`
-7. `POST /enrollments`
-8. `POST /session-templates`
-9. `POST /sessions/generate`
+1. `POST /auth/login` (or `/auth/bootstrap` for first admin)
+2. `POST /classes`
+3. `POST /subjects`
+4. `POST /academic-years`
+5. `POST /offerings`
+6. `POST /staff`
+7. `POST /students` (include `class_id`)
+8. `POST /batches`
+9. `POST /enrollments`
+10. `POST /enrollments/{id}/payments` (optional)
+11. `POST /session-templates`
+12. `POST /sessions/generate`
 
 ## Typical teacher flow
 

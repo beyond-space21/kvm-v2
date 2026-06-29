@@ -3,7 +3,9 @@ package httpx
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 )
 
 type APIError struct {
@@ -12,12 +14,12 @@ type APIError struct {
 }
 
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrForbidden     = errors.New("forbidden")
-	ErrUnauthorized  = errors.New("unauthorized")
-	ErrConflict      = errors.New("conflict")
-	ErrBadRequest    = errors.New("bad request")
-	ErrInvalidInput  = errors.New("invalid input")
+	ErrNotFound     = errors.New("resource not found")
+	ErrForbidden    = errors.New("access denied")
+	ErrUnauthorized = errors.New("authentication required")
+	ErrConflict     = errors.New("resource conflict")
+	ErrBadRequest   = errors.New("bad request")
+	ErrInvalidInput = errors.New("invalid request")
 )
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {
@@ -27,17 +29,20 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func WriteError(w http.ResponseWriter, err error) {
+	err = NormalizeError(err)
 	switch {
 	case errors.Is(err, ErrNotFound):
-		WriteJSON(w, http.StatusNotFound, APIError{Error: err.Error(), Code: "NOT_FOUND"})
+		WriteJSON(w, http.StatusNotFound, APIError{Error: errorMessage(err, ErrNotFound), Code: "NOT_FOUND"})
 	case errors.Is(err, ErrForbidden):
-		WriteJSON(w, http.StatusForbidden, APIError{Error: err.Error(), Code: "FORBIDDEN"})
+		WriteJSON(w, http.StatusForbidden, APIError{Error: errorMessage(err, ErrForbidden), Code: "FORBIDDEN"})
 	case errors.Is(err, ErrUnauthorized):
-		WriteJSON(w, http.StatusUnauthorized, APIError{Error: err.Error(), Code: "UNAUTHORIZED"})
+		WriteJSON(w, http.StatusUnauthorized, APIError{Error: errorMessage(err, ErrUnauthorized), Code: "UNAUTHORIZED"})
 	case errors.Is(err, ErrConflict):
-		WriteJSON(w, http.StatusConflict, APIError{Error: err.Error(), Code: "CONFLICT"})
-	case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrBadRequest):
-		WriteJSON(w, http.StatusBadRequest, APIError{Error: err.Error(), Code: "BAD_REQUEST"})
+		WriteJSON(w, http.StatusConflict, APIError{Error: errorMessage(err, ErrConflict), Code: "CONFLICT"})
+	case errors.Is(err, ErrInvalidInput):
+		WriteJSON(w, http.StatusBadRequest, APIError{Error: errorMessage(err, ErrInvalidInput), Code: "BAD_REQUEST"})
+	case errors.Is(err, ErrBadRequest):
+		WriteJSON(w, http.StatusBadRequest, APIError{Error: errorMessage(err, ErrBadRequest), Code: "BAD_REQUEST"})
 	default:
 		WriteJSON(w, http.StatusInternalServerError, APIError{Error: "internal server error", Code: "INTERNAL"})
 	}
@@ -45,11 +50,59 @@ func WriteError(w http.ResponseWriter, err error) {
 
 func DecodeJSON(r *http.Request, dst any) error {
 	if r.Body == nil {
-		return ErrBadRequest
+		return BadRequest("request body is required")
 	}
 	defer r.Body.Close()
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		return ErrInvalidInput
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return InvalidInput("request body must be valid JSON")
+	}
+	if dec.More() {
+		return InvalidInput("request body must contain a single JSON object")
 	}
 	return nil
+}
+
+func InvalidInput(message string) error {
+	return wrap(ErrInvalidInput, message)
+}
+
+func BadRequest(message string) error {
+	return wrap(ErrBadRequest, message)
+}
+
+func NotFound(message string) error {
+	return wrap(ErrNotFound, message)
+}
+
+func Forbidden(message string) error {
+	return wrap(ErrForbidden, message)
+}
+
+func Unauthorized(message string) error {
+	return wrap(ErrUnauthorized, message)
+}
+
+func Conflict(message string) error {
+	return wrap(ErrConflict, message)
+}
+
+func wrap(base error, message string) error {
+	if strings.TrimSpace(message) == "" {
+		return base
+	}
+	return fmt.Errorf("%w: %s", base, message)
+}
+
+func errorMessage(err error, base error) string {
+	if err == nil {
+		return base.Error()
+	}
+	msg := err.Error()
+	prefix := base.Error() + ": "
+	if strings.HasPrefix(msg, prefix) {
+		return strings.TrimPrefix(msg, prefix)
+	}
+	return msg
 }

@@ -17,11 +17,11 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := ClaimsFromContext(r.Context())
 			if !ok {
-				httpx.WriteError(w, httpx.ErrUnauthorized)
+				httpx.WriteError(w, httpx.Unauthorized("authentication required"))
 				return
 			}
 			if _, ok := allowed[claims.Role]; !ok {
-				httpx.WriteError(w, httpx.ErrForbidden)
+				httpx.WriteError(w, httpx.Forbidden("insufficient permissions for this action"))
 				return
 			}
 			next.ServeHTTP(w, r)
