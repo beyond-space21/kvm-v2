@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS attendance_audit_log;
+DROP TABLE IF EXISTS attendance_records;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS session_templates;
+DROP TABLE IF EXISTS enrollments;
+DROP TABLE IF EXISTS batches;
+DROP TABLE IF EXISTS subject_offering_fee_history;
+DROP TABLE IF EXISTS subject_offerings;
+DROP TABLE IF EXISTS subjects;
+DROP TABLE IF EXISTS academic_classes;
+DROP TABLE IF EXISTS academic_years;
+DROP TABLE IF EXISTS users;
